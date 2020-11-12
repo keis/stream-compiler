@@ -9,6 +9,7 @@ GES.init()
 import argparse
 import scfg
 from .compiler import compiler_test
+from .asset import AssetCollection
 
 
 parser = argparse.ArgumentParser()
@@ -59,8 +60,10 @@ def run() -> bool:
         'error-loading-asset',
         lambda project, error, id, exctractable_type: print("Error loading", project, id, error))
 
+    assets = AssetCollection(project)
+
     try:
-        element = compiler_test(project, config, preview=args.preview)
+        element = compiler_test(assets, config, preview=args.preview)
     except:
         GLib.idle_add(quit)
         raise

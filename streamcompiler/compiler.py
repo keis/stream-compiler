@@ -1,9 +1,12 @@
 import scfg
 import re
+
 from datetime import timedelta
 from pathlib import Path
 from typing import Dict, Optional
 from gi.repository import GLib, Gst, GES, GstPbutils
+
+from .asset import AssetCollection
 
 
 def encoding_profile(outputd: Optional[scfg.Directive]):
@@ -51,27 +54,12 @@ def parse_timedelta(delta: str) -> timedelta:
     )
 
 
-def prepare_inputs(project: GES.Project, config: scfg.Config) -> Dict[str, str]:
-    inputs: Dict[str, str] = {}
-
-    for input in config.get_all('input'):
-        name, = input.params
-        path = input.get('path')
-        if not path:
-            continue
-        uri = Gst.filename_to_uri(path.params[0])
-        project.create_asset(uri, GES.UriClip)
-        GES.UriClip.new(uri)
-        inputs[name] = uri
-
-    return inputs
-
-
-def compiler_test(project: GES.Project, config: scfg.Config, *, preview=False) -> GES.Pipeline:
+def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False) -> GES.Pipeline:
     timeline = GES.Timeline.new_audio_video()
     layer = timeline.append_layer()
     pos = timedelta(seconds=0)
-    input_assets = prepare_inputs(project, config)
+    for input in config.get_all('input'):
+        assets.add_from_input(input)
     inputoffsets: Dict[str, timedelta] = {}
     track = config.get('track')
     if not track:
@@ -97,7 +85,7 @@ def compiler_test(project: GES.Project, config: scfg.Config, *, preview=False) -
         inputoffsets[inputd.params[0]] = offset + duration
 
         print(f"Adding {input_name} @ {pos} ; Offset {offset} Duration {duration}")
-        asset = project.get_asset(input_assets[input_name], GES.UriClip)
+        asset = assets[input_name]
         nanoduration = int((duration / timedelta(microseconds=1)) * 1_000)
         nanooffset = int((offset / timedelta(microseconds=1)) * 1_000)
         nanopos = int((pos / timedelta(microseconds=1)) * 1_000)
