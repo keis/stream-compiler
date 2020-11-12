@@ -10,6 +10,7 @@ import argparse
 import scfg
 from .compiler import compiler_test
 from .asset import AssetCollection
+from .future import Future, run_soon
 
 
 parser = argparse.ArgumentParser()
@@ -30,12 +31,7 @@ def asset_loading(project, asset) -> None:
     print(f"Asset loading {asset.get_id()}")
 
 
-def quit() -> bool:
-    loop.quit()
-    return False
-
-
-def run() -> bool:
+def run_pipeline(element: GES.Pipeline) -> None:
     def bus_message(bus, message) -> None:
         if message.type == Gst.MessageType.EOS:
             print("End of stream")
@@ -50,6 +46,29 @@ def run() -> bool:
             oldstate, newstate, pending = message.parse_state_changed()
             #print(f'State {message.src.name}: {oldstate.value_nick} -> <{newstate.value_nick}> -> {pending.value_nick}')
 
+    if args.dry_run:
+        print("This is a dry-run")
+        run_soon(loop.quit)
+        return
+    result = element.set_state(Gst.State.PLAYING)
+    if result == Gst.StateChangeReturn.FAILURE:
+        print("Failed to change pipeline to playing state")
+        run_soon(loop.quit)
+        return
+    bus = element.get_bus()
+    bus.add_signal_watch()
+    bus.connect('message', bus_message)
+
+
+def finish(fut: Future[None]) -> None:
+    try:
+        fut.result()
+    except:
+        run_soon(loop.quit)
+        raise
+
+
+def run_compiler() -> None:
     config = scfg.Config(args.config.name)
     config.load()
 
@@ -63,27 +82,14 @@ def run() -> bool:
     assets = AssetCollection(project)
 
     try:
-        element = compiler_test(assets, config, preview=args.preview)
+        compilefut = compiler_test(assets, config, preview=args.preview)
+        compilefut.then(run_pipeline).add_done_callback(finish)
     except:
-        GLib.idle_add(quit)
+        run_soon(loop.quit)
         raise
 
-    if args.dry_run:
-        print("This is a dry-run")
-        GLib.idle_add(quit)
-        return False
-    result = element.set_state(Gst.State.PLAYING)
-    if result == Gst.StateChangeReturn.FAILURE:
-        print("Failed to change pipeline to playing state")
-        GLib.idle_add(quit)
-        return False
-    bus = element.get_bus()
-    bus.add_signal_watch()
-    bus.connect('message', bus_message)
 
-    return False
-
-GLib.idle_add(run)
+run_soon(run_compiler)
 
 loop = GLib.MainLoop()
 loop.run()
