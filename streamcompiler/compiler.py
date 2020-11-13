@@ -35,11 +35,88 @@ def create_timeline(profile: Profile) -> GES.Timeline:
     return timeline
 
 
+def process_track(profile: Profile, assets: AssetCollection, layer: GES.Layer, trackd: scfg.Directive) -> None:
+    pos = timedelta(seconds=0)
+    inputoffsets: Dict[str, timedelta] = {}
+
+    for clipd in trackd.get_all('clip'):
+        inputd = clipd.get('input')
+        if not inputd:
+            continue
+        input_name = inputd.params[0]
+
+        offsetd = clipd.get('offset')
+        if offsetd:
+            offset = parse_timedelta(offsetd.params[0])
+        else:
+            offset = inputoffsets.get(input_name, timedelta(seconds=0))
+
+        durationd = clipd.get('duration')
+        if durationd:
+            duration = parse_timedelta(durationd.params[0])
+        else:
+            duration = timedelta(seconds=2)
+
+        inputoffsets[inputd.params[0]] = offset + duration
+
+        print(f"Adding {input_name} @ {pos} ; Offset {offset} Duration {duration}")
+        asset = assets[input_name]
+        nanoduration = int((duration / timedelta(microseconds=1)) * 1_000)
+        nanooffset = int((offset / timedelta(microseconds=1)) * 1_000)
+        nanopos = int((pos / timedelta(microseconds=1)) * 1_000)
+        clip = layer.add_asset(
+            asset,
+            nanopos,
+            nanooffset,
+            nanoduration,
+            GES.TrackType.UNKNOWN
+        )
+
+        opacityd = clipd.get('opacity')
+        if opacityd:
+            opacity = float(opacityd.params[0])
+            transparency_effect = GES.Effect.new(f'frei0r-filter-transparency transparency={opacity}')
+            clip.add_top_effect(transparency_effect, -1)
+
+        scaled = clipd.get('scale')
+        if scaled:
+            scale = float(scaled.params[0])
+            info = asset.get_info()
+            video, = info.get_video_streams()
+            _ok, width = clip.get_child_property('width')
+            _ok, height = clip.get_child_property('height')
+            clip.set_child_property('width', int(width * scale))
+            clip.set_child_property('height', int(height * scale))
+
+        positiond = clipd.get('position')
+        if positiond:
+            position = positiond.params[0]
+
+            _ok, elemwidth = clip.get_child_property('width')
+            _ok, elemheight = clip.get_child_property('height')
+
+            videowidth, videoheight = profile.video_width, profile.video_height
+            if position == 'bottom-right':
+                clip.set_child_property('posx', videowidth - elemwidth)
+                clip.set_child_property('posy', videoheight - elemheight)
+            elif position == 'bottom-left':
+                clip.set_child_property('posx', 0)
+                clip.set_child_property('posy', videoheight - elemheight)
+            elif position == 'top-right':
+                clip.set_child_property('posx', videowidth - elemwidth)
+                clip.set_child_property('posy', 0)
+            elif position == 'top-left':
+                clip.set_child_property('posx', 0)
+                clip.set_child_property('posy', 0)
+            else:
+                raise ValueError(f"Unknown position {position}")
+
+        pos += duration
+
+
 def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False) -> Future[GES.Pipeline]:
     profile = Profile.from_config(config.get('output'))
     timeline = create_timeline(profile)
-
-    layer = timeline.append_layer()
 
     def stage1():
         return Future.gather(
@@ -47,44 +124,9 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
         ).then(stage2)
 
     def stage2(_assets: List[GES.Asset]):
-        pos = timedelta(seconds=0)
-        inputoffsets: Dict[str, timedelta] = {}
-        track = config.get('track')
-        if not track:
-            return
-        for clip in track.get_all('clip'):
-            inputd = clip.get('input')
-            if not inputd:
-                continue
-            input_name = inputd.params[0]
-
-            offsetd = clip.get('offset')
-            if offsetd:
-                offset = parse_timedelta(offsetd.params[0])
-            else:
-                offset = inputoffsets.get(input_name, timedelta(seconds=0))
-
-            durationd = clip.get('duration')
-            if durationd:
-                duration = parse_timedelta(durationd.params[0])
-            else:
-                duration = timedelta(seconds=2)
-
-            inputoffsets[inputd.params[0]] = offset + duration
-
-            print(f"Adding {input_name} @ {pos} ; Offset {offset} Duration {duration}")
-            asset = assets[input_name]
-            nanoduration = int((duration / timedelta(microseconds=1)) * 1_000)
-            nanooffset = int((offset / timedelta(microseconds=1)) * 1_000)
-            nanopos = int((pos / timedelta(microseconds=1)) * 1_000)
-            layer.add_asset(
-                asset,
-                nanopos,
-                nanooffset,
-                nanoduration,
-                GES.TrackType.UNKNOWN
-            )
-            pos += duration
+        for track in config.get_all('track'):
+            layer = timeline.append_layer()
+            process_track(profile, assets, layer, track)
 
         ## Configure pipeline
         pipeline = GES.Pipeline.new()
