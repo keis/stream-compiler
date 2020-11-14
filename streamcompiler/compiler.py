@@ -22,8 +22,23 @@ def parse_timedelta(delta: str) -> timedelta:
     )
 
 
+def create_timeline(profile: Profile) -> GES.Timeline:
+    timeline = GES.Timeline.new()
+    audio_track = GES.AudioTrack.new()
+    video_track = GES.VideoTrack.new()
+    video_track.set_restriction_caps(
+        Gst.Caps.from_string(f'video/x-raw,width={profile.video_width},height={profile.video_height}'))
+
+    timeline.add_track(video_track)
+    timeline.add_track(audio_track)
+
+    return timeline
+
+
 def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False) -> Future[GES.Pipeline]:
-    timeline = GES.Timeline.new_audio_video()
+    profile = Profile.from_config(config.get('output'))
+    timeline = create_timeline(profile)
+
     layer = timeline.append_layer()
 
     def stage1():
@@ -79,7 +94,6 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
             pipeline.set_mode(GES.PipelineFlags.FULL_PREVIEW)
         else:
             outputd = config.get('output')
-            profile = Profile.from_config(outputd)
             output_path = None
             if outputd:
                 output_pathd = outputd.get('path')
@@ -92,7 +106,7 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
             if not pipeline.set_render_settings(output_uri , profile.container_profile):
                 raise RuntimeError("Failed to set render settings")
             pipeline.set_mode(GES.PipelineFlags.SMART_RENDER)
-            print(f"Rendering to {output_path}")
+            print(f"Rendering to {output_path} {profile.video_width}x{profile.video_height}")
 
         return pipeline
 

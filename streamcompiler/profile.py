@@ -34,10 +34,11 @@ class Profile:
 
         videod = outputd and outputd.get('video')
         videoformat = videod.params[0] if videod else 'video/x-theora'
+        width, height = 1280, 720
         video_profile = GstPbutils.EncodingVideoProfile.new(
             Gst.Caps.from_string(videoformat),
             None,
-            Gst.Caps.from_string('video/x-raw'),
+            Gst.Caps.from_string(f'video/x-raw,width={width},height={height}'),
             0
         )
 
@@ -58,3 +59,15 @@ class Profile:
     @property
     def file_extension(self) -> Optional[str]:
         return self.container_profile.get_file_extension()
+
+    @property
+    def video_width(self) -> Optional[int]:
+        res = self.video_profile.get_restriction()
+        structure = res.get_structure(0)
+        return structure.get_value('width')
+
+    @property
+    def video_height(self) -> Optional[int]:
+        res = self.video_profile.get_restriction()
+        structure = res.get_structure(0)
+        return structure.get_value('height')
