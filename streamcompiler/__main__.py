@@ -19,6 +19,7 @@ parser.add_argument('-p', '--preview', action='store_true')
 parser.add_argument('--dry-run', action='store_true')
 
 args = parser.parse_args()
+loop = GLib.MainLoop()
 
 
 def asset_added(project, asset) -> None:
@@ -89,7 +90,6 @@ def run_compiler() -> None:
         raise
 
 
-run_soon(run_compiler)
-
-loop = GLib.MainLoop()
-loop.run()
+def main():
+    run_soon(run_compiler)
+    loop.run()
