@@ -8,40 +8,7 @@ from gi.repository import GLib, Gst, GES, GstPbutils
 
 from .asset import AssetCollection
 from .future import Future
-
-
-def encoding_profile(outputd: Optional[scfg.Directive]):
-    containerd = outputd and outputd.get('container')
-    containerformat = containerd.params[0] if containerd else 'application/ogg'
-    container_profile = GstPbutils.EncodingContainerProfile.new(
-        "stream-compiler-profile",
-        "stream-compiler encoding profile",
-        Gst.Caps.from_string(containerformat),
-        None
-    )
-
-    videod = outputd and outputd.get('video')
-    videoformat = videod.params[0] if videod else 'video/x-theora'
-    video_profile = GstPbutils.EncodingVideoProfile.new(
-        Gst.Caps.from_string(videoformat),
-        None,
-        Gst.Caps.from_string('video/x-raw'),
-        0
-    )
-
-    audiod = outputd and outputd.get('audio')
-    audioformat = audiod.params[0] if audiod else 'audio/x-vorbis'
-    audio_profile = GstPbutils.EncodingAudioProfile.new(
-        Gst.Caps.from_string(audioformat),
-        None,
-        Gst.Caps.from_string('audio/x-raw'),
-        0
-    )
-
-    container_profile.add_profile(video_profile)
-    container_profile.add_profile(audio_profile)
-
-    return container_profile
+from .profile import Profile
 
 
 def parse_timedelta(delta: str) -> timedelta:
@@ -112,7 +79,7 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
             pipeline.set_mode(GES.PipelineFlags.FULL_PREVIEW)
         else:
             outputd = config.get('output')
-            encprofile = encoding_profile(outputd)
+            profile = Profile.from_config(outputd)
             output_path = None
             if outputd:
                 output_pathd = outputd.get('path')
@@ -120,9 +87,9 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
                     output_path = Path(output_pathd.params[0])
             if not output_path:
                 config_path = Path(config.filename)
-                output_path = config_path.with_suffix('.' + encprofile.get_file_extension())
+                output_path = config_path.with_suffix(f'.{profile.file_extension}')
             output_uri = Gst.filename_to_uri(str(output_path))
-            if not pipeline.set_render_settings(output_uri , encprofile):
+            if not pipeline.set_render_settings(output_uri , profile.container_profile):
                 raise RuntimeError("Failed to set render settings")
             pipeline.set_mode(GES.PipelineFlags.SMART_RENDER)
             print(f"Rendering to {output_path}")
