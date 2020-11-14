@@ -1,7 +1,8 @@
 import scfg
 
-from typing import Dict
 from gi.repository import Gst, GES
+from pathlib import Path
+from typing import Dict
 
 from .future import Future
 
@@ -26,7 +27,7 @@ class AssetCollection:
         path = input.get('path')
         if not path:
             raise ValueError("Missing property: path")
-        uri = Gst.filename_to_uri(path.params[0])
+        uri = Path(path.params[0]).expanduser().resolve().as_uri()
         self.project.create_asset(uri, GES.UriClip)
         self.assets[name] = uri
 

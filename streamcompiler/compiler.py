@@ -144,7 +144,7 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
             if not output_path:
                 config_path = Path(config.filename)
                 output_path = config_path.with_suffix(f'.{profile.file_extension}')
-            output_uri = Gst.filename_to_uri(str(output_path))
+            output_uri = output_path.resolve().as_uri()
             if not pipeline.set_render_settings(output_uri , profile.container_profile):
                 raise RuntimeError("Failed to set render settings")
             pipeline.set_mode(GES.PipelineFlags.SMART_RENDER)
