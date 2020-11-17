@@ -93,3 +93,7 @@ def run_compiler() -> None:
 def main():
     run_soon(run_compiler)
     loop.run()
+
+
+if __name__ == '__main__':
+    main()
