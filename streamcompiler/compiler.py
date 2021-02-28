@@ -114,8 +114,7 @@ def process_track(profile: Profile, assets: AssetCollection, layer: GES.Layer, t
         pos += duration
 
 
-def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False) -> Future[GES.Pipeline]:
-    profile = Profile.from_config(config.get('output'))
+def compile(config: scfg.Config, profile: Profile, assets: AssetCollection) -> Future[GES.Timeline]:
     timeline = create_timeline(profile)
 
     def stage1():
@@ -128,28 +127,6 @@ def compiler_test(assets: AssetCollection, config: scfg.Config, *, preview=False
             layer = timeline.append_layer()
             process_track(profile, assets, layer, track)
 
-        ## Configure pipeline
-        pipeline = GES.Pipeline.new()
-        pipeline.set_timeline(timeline)
-
-        if preview:
-            pipeline.set_mode(GES.PipelineFlags.FULL_PREVIEW)
-        else:
-            outputd = config.get('output')
-            output_path = None
-            if outputd:
-                output_pathd = outputd.get('path')
-                if output_pathd:
-                    output_path = Path(output_pathd.params[0])
-            if not output_path:
-                config_path = Path(config.filename)
-                output_path = config_path.with_suffix(f'.{profile.file_extension}')
-            output_uri = output_path.resolve().as_uri()
-            if not pipeline.set_render_settings(output_uri , profile.container_profile):
-                raise RuntimeError("Failed to set render settings")
-            pipeline.set_mode(GES.PipelineFlags.SMART_RENDER)
-            print(f"Rendering to {output_path} {profile.video_width}x{profile.video_height}")
-
-        return pipeline
+        return timeline
 
     return stage1()
